@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en-us">
+<head>
+	<meta charset="utf-8">
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<script>
+		var Module = {
+			preInit: () => {
+				ENV.VIPS_MAX_THREADS = Math.max(navigator.hardwareConcurrency, 6);
+			},
+			onRuntimeInitialized: async () => {
+				const outputElement = document.getElementById("output");
+				outputElement.textContent = "starting";
+				Module.initialize();
+				outputElement.textContent = "initialized";
+				const out_image = new Uint8Array(480 * 800);
+				window.out_image = out_image;
+				const palette = Module.GDEP073E01_spectra_6_palette();
+				outputElement.textContent = "converting";
+				let output_rotation = Module.convert("rainbow.jpg", 800, palette, Module.default_options(), out_image);
+				outputElement.textContent = `done: ${!!output_rotation}`;
+
+				let result = Module.write_encre_bin(out_image, 800, palette.points, output_rotation, "converted.png");
+				outputElement.textContent += ` ${result}`;
+
+				out_image.fill(0);
+				const palette_points = new Module.OklabArray()
+				const maybeAndRotation = Module.read_encre_bin("converted.png", out_image, palette_points);
+				outputElement.textContent += ` ${!!maybeAndRotation} ${maybeAndRotation.width} ${maybeAndRotation.rotation.value}`;
+
+				out_image.fill(0);
+				output_rotation = Module.read_compatible_encre_bin("converted.png", 800, palette.points, out_image);
+				outputElement.textContent += ` ${!!output_rotation}`;
+
+				result = Module.write_preview(out_image, 800, palette_points, output_rotation, "preview.png");
+				outputElement.textContent += ` ${result}`;
+
+				var blob = new Blob([FS.readFile("preview.png")], {"type": "image/png"});
+				var url = URL.createObjectURL(blob);
+
+				const canvas = document.getElementById("canvas");
+				const context = canvas.getContext("2d");
+				const image = new Image();
+				image.src = url;
+				image.onload = () => context.drawImage(image, 0, 0);
+
+				palette.delete();
+				palette_points.delete();
+
+				var formData = new FormData();
+				formData.append("file", new Blob([FS.readFile("converted.png")]));
+
+				outputElement.textContent += " " + (await fetch("http://laptop.local/", {method: "POST", body: formData, targetAddressSpace: "local"})).statusText;
+				// outputElement.textContent += " " + (await fetch("http://cadre2.local/", {method: "POST", body: formData, targetAddressSpace: "private"})).statusText;
+			},
+		};
+	</script>
+	<script src="js_encre.js"></script>
+</head>
+<body>
+	<div id="output">Init</div>
+	<canvas id="canvas" width="800" height="480"></canvas>
+</body>
+</html>
